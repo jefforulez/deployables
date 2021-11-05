@@ -135,7 +135,9 @@ function aws_test_profile {
 
 function aws_run () {
   aws_configure
+  set -f
   aws --profile=${DEPLOY_AWS_PROFILE} ${@:1}
+  set +f
 }
 
 ##
