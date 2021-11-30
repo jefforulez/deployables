@@ -640,6 +640,20 @@ function _lambda_init_zip_vars () {
 
 }
 
+function _lambda_wait_for_function_updated () {
+
+    aws lambda wait function-updated \
+        --profile       "${DEPLOY_AWS_PROFILE}" \
+        --function-name "${DEPLOY_LAMBDA_FUNCTION_NAME}"
+  
+    if [[ $? != 0 ]] ; then  
+        echo "Error waiting for lambda function to update, DEPLOY_LAMBDA_FUNCTION_NAME=${DEPLOY_LAMBDA_FUNCTION_NAME}"
+        exit 1
+    fi
+    
+}
+
+
 function lambda_package_zip () {
 
     _lambda_init_zip_vars
@@ -740,7 +754,6 @@ function lambda_update_from_s3 () {
     # setup aws
     aws_configure
 
-
     lambda_env_template="${DEPLOY_LAMBDA_FUNCTION_ENV_TEMPLATE:-environment.txt}"
 
     if [[ -f ${lambda_env_template} ]] ; then
@@ -771,6 +784,8 @@ function lambda_update_from_s3 () {
         echo "Error: Failed to update lambda function configuration"
         exit 1
     fi
+
+    _lambda_wait_for_function_updated()
 
     # update lambda function
     lambda_function_sha256=$( \
@@ -897,6 +912,8 @@ function lambda_deploy () {
         echo "Info: Creating a new lambda function failed"
         echo "Info: Attemping to update existing lambda function"
 
+        _lambda_wait_for_function_updated()
+    
         lambda_function_arn=$( \
             aws lambda update-function-configuration \
                 --profile "${DEPLOY_AWS_PROFILE}" \
@@ -910,6 +927,8 @@ function lambda_deploy () {
                 ${lambda_env:+ --environment "${lambda_env}"} \
             | $JQ ".FunctionArn"
         )
+
+        _lambda_wait_for_function_updated()
 
         # update lambda function
         lambda_function_sha256=$( \
@@ -925,6 +944,8 @@ function lambda_deploy () {
             echo "Error: Failed to update lambda function"
             exit 1
         fi
+
+        _lambda_wait_for_function_updated()
 
     fi
 
