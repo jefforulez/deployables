@@ -785,7 +785,7 @@ function lambda_update_from_s3 () {
         exit 1
     fi
 
-    _lambda_wait_for_function_updated()
+    _lambda_wait_for_function_updated
 
     # update lambda function
     lambda_function_sha256=$( \
@@ -912,7 +912,7 @@ function lambda_deploy () {
         echo "Info: Creating a new lambda function failed"
         echo "Info: Attemping to update existing lambda function"
 
-        _lambda_wait_for_function_updated()
+        _lambda_wait_for_function_updated
     
         lambda_function_arn=$( \
             aws lambda update-function-configuration \
@@ -928,7 +928,7 @@ function lambda_deploy () {
             | $JQ ".FunctionArn"
         )
 
-        _lambda_wait_for_function_updated()
+        _lambda_wait_for_function_updated
 
         # update lambda function
         lambda_function_sha256=$( \
@@ -945,7 +945,7 @@ function lambda_deploy () {
             exit 1
         fi
 
-        _lambda_wait_for_function_updated()
+        _lambda_wait_for_function_updated
 
     fi
 
