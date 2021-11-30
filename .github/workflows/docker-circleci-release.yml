@@ -6,11 +6,6 @@ on:
     types:
       [released]
 
-  push:
-    branches:
-      - 'dev/*'
-      - 'jeffo/*'
-
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
