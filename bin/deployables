@@ -58,7 +58,7 @@ DEPLOY_LAMBDA_FUNCTION_MEMORY_SIZE="${DEPLOY_LAMBDA_FUNCTION_MEMORY_SIZE:-128}"
 
 
 ##
-## private functions
+## helper functions
 ##
 
 function check_environment {
@@ -197,7 +197,6 @@ function docker_build {
         .
 
 }
-
 
 ##
 ## ecr
@@ -632,9 +631,6 @@ function ecs_verify_deploy () {
 
 # ---
 
-
-# ---
-
 function ecs_deploy_updated_image () {
 
     # check environment variables
@@ -705,8 +701,6 @@ function _ecs_update_service_task_image () {
     fi
 }
 
-
-
 ##
 ## lambda
 ##
@@ -744,7 +738,6 @@ function _lambda_wait_for_function_updated () {
     fi
 
 }
-
 
 function lambda_package_zip () {
 
@@ -1134,7 +1127,6 @@ function deploy_lambda_event () {
     echo "Deprecated: Please use lambda_deploy_event()"
     lambda_deploy_event
 }
-
 
 ##
 ## MAIN
