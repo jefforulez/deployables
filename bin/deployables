@@ -683,19 +683,19 @@ function _ecs_register_updated_task () {
         echo ${register_task} | $JQ '.taskDefinition.taskDefinitionArn'
     )
 
-    ECS_UPDATED_TASK_ARNS[ ${DEPLOY_APP_NAME} ] = $task_arn
+    ECS_UPDATED_TASK_ARNS[ ${DEPLOY_APP_NAME} ]=${task_arn}
 }
 
 function _ecs_update_service_task_image () {
 
-    local task_arn=${ECS_UPDATED_TASK_ARNS[${DEPLOY_APP_NAME}]}
+    local task_arn="${ECS_UPDATED_TASK_ARNS[ ${DEPLOY_APP_NAME} ]}"
 
     revision_actual=$( \
           aws ecs update-service \
             --profile ${DEPLOY_AWS_PROFILE} \
             --cluster ${DEPLOY_ECS_CLUSTER_NAME} \
             --service ${DEPLOY_APP_NAME} \
-            --task-definition $task_arn \
+            --task-definition ${task_arn} \
           | $JQ '.service.taskDefinition' \
       )
 
