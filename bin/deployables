@@ -51,7 +51,7 @@ DEPLOY_CURRENT_TIME="$(date +%Y%m%d)"
 ## lambda defaults
 ##
 
-DEPLOY_LAMBDA_FUNCTION_RUNTIME="${DEPLOY_LAMBDA_FUNCTION_RUNTIME:-nodejs6.10}"
+DEPLOY_LAMBDA_FUNCTION_RUNTIME="${DEPLOY_LAMBDA_FUNCTION_RUNTIME:-nodejs14.x}"
 DEPLOY_LAMBDA_FUNCTION_HANDLER="${DEPLOY_LAMBDA_FUNCTION_HANDLER:-index.handler}"
 DEPLOY_LAMBDA_FUNCTION_TIMEOUT="${DEPLOY_LAMBDA_FUNCTION_TIMEOUT:-3}"
 DEPLOY_LAMBDA_FUNCTION_MEMORY_SIZE="${DEPLOY_LAMBDA_FUNCTION_MEMORY_SIZE:-128}"
@@ -307,9 +307,179 @@ function ecr_push_image () {
 
 }
 
+function ecr_deploy_image () {
+
+    # check environment variables
+    check_environment
+
+    # setup aws
+    aws_configure
+    ecr_login
+
+    _ecr_deploy_image
+}
+
+function _ecr_deploy_image () {
+
+    #
+    # push images
+    #
+
+    local ecr_repo_name="${DEPLOY_ECR_REPO:-$DEPLOY_APP_NAME}"
+
+    if [[ ! -z "${DEPLOY_RETAG_AND_PUSH}" ]] ; then
+
+        remote_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:${DEPLOY_RETAG_REMOTE_TAG}"
+        target_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:${DEPLOY_RETAG_TARGET_TAG}"
+
+        echo
+        echo DEPLOY_RETAG_AND_PUSH: ${DEPLOY_RETAG_AND_PUSH}
+        echo remote_tag: ${remote_tag}
+        echo target_tag: ${target_tag}
+        echo
+
+        ecr_pull_image \
+            $remote_tag
+
+        ecr_tag_image \
+            $remote_tag \
+            $target_tag
+
+        ecr_push_image \
+            $target_tag
+
+        DEPLOY_IMAGE="${target_tag}"
+
+    else
+
+        target_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:$(_get_target_image_tag)"
+
+        echo
+        echo Pushing primary tag
+        echo target_tag: ${target_tag}
+        echo
+
+        ecr_tag_image \
+            $DEPLOY_DOCKER_LOCAL_TAG \
+            $target_tag
+
+        ecr_push_image \
+            $target_tag
+
+        if [[ ! -z "$DEPLOY_PUSH_SECONDARY_TAG" ]] ; then
+
+            secondary_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:${DEPLOY_PUSH_SECONDARY_TAG}"
+
+            echo
+            echo Pushing secondary tag
+            echo secondary_tag: ${secondary_tag}
+            echo
+
+            ecr_tag_image \
+                $target_tag \
+                $secondary_tag
+
+            ecr_push_image \
+                $secondary_tag
+        fi
+
+        DEPLOY_IMAGE="${target_tag}"
+
+    fi
+
+    if [[ -z "${DEPLOY_IMAGE}" ]] ; then
+        echo "Error: deploy image is undefined, DEPLOY_IMAGE=${DEPLOY_IMAGE}"
+        exit 1
+    fi
+
+}
+
+function _get_target_image_tag() {
+
+  local local_target_tag="${DEPLOY_CURRENT_TIME}-${DEPLOY_SHA1}"
+
+  if [ ! -z "$DEPLOY_ADD_ENV_TO_TAG" ]; then
+    local_target_tag="${local_target_tag}-${DEPLOY_ADD_ENV_TO_TAG:-$FLM_ENV}"
+  fi
+
+  echo $local_target_tag
+}
+
+
 ##
 ## ecs
 ##
+
+# ---
+
+function ecs_deploy () {
+
+    # check environment variables
+    check_environment
+
+    # setup aws
+    aws_configure
+    ecr_login
+
+    ecr_deploy_image
+    _ecs_update_service
+}
+
+function ecs_deploy_image () {
+
+    # check environment variables
+    check_environment
+
+    # setup aws
+    aws_configure
+    ecr_login
+
+    _ecr_deploy_image
+}
+
+function ecs_update_service () {
+
+    # check environment variables
+    check_environment
+
+    # setup aws
+    aws_configure
+    ecr_login
+
+    _ecs_update_service
+}
+
+function _ecs_update_service () {
+
+    DEPLOY_IMAGE_TAG="${DEPLOY_IMAGE_TAG:-$(_get_target_image_tag)}"
+
+    #
+    # deploy task defs
+    #
+
+    # deploy all the tasks first...
+    if [[ -z "$DEPLOY_ECS_FAMILIES" ]] ; then
+
+        ecs_deploy_task $DEPLOY_IMAGE_TAG
+        ecs_verify_deploy
+
+    else
+
+        for family in $DEPLOY_ECS_FAMILIES
+        do
+            ecs_deploy_task $DEPLOY_IMAGE_TAG $family
+        done
+
+        for family in $DEPLOY_ECS_FAMILIES
+        do
+            ecs_verify_deploy $family
+        done
+
+    fi
+
+}
+
+# ---
 
 function ecs_deploy_task () {
 
@@ -460,20 +630,12 @@ function ecs_verify_deploy () {
     exit 1
 }
 
-function ecs_deploy () {
+# ---
 
-  # check environment variables
-  check_environment
 
-  # setup aws
-  aws_configure
-  ecr_login
+# ---
 
-  _ecs_deploy_image
-  _ecs_update_service
-}
-
-function ecs_deploy_image () {
+function ecs_deploy_updated_image () {
 
     # check environment variables
     check_environment
@@ -482,137 +644,67 @@ function ecs_deploy_image () {
     aws_configure
     ecr_login
 
-    _ecs_deploy_image
+    _ecs_register_updated_task
+    _ecs_update_service_task_image
 }
 
-function ecs_update_service () {
+declare -a ECS_UPDATED_TASK_ARNS
 
-    # check environment variables
-    check_environment
-
-    # setup aws
-    aws_configure
-    ecr_login
-
-    _ecs_update_service
-}
-
-
-function _get_target_image_tag() {
-
-  local local_target_tag="${DEPLOY_CURRENT_TIME}-${DEPLOY_SHA1}"
-
-  if [ ! -z "$DEPLOY_ADD_ENV_TO_TAG" ]; then
-    local_target_tag="${local_target_tag}-${DEPLOY_ADD_ENV_TO_TAG:-$FLM_ENV}"
-  fi
-
-  echo $local_target_tag
-}
-
-function _ecs_deploy_image () {
-
-    #
-    # push images
-    #
-
-    local ecr_repo_name="${DEPLOY_ECR_REPO:-$DEPLOY_APP_NAME}"
-
-    if [[ ! -z "${DEPLOY_RETAG_AND_PUSH}" ]] ; then
-
-        remote_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:${DEPLOY_RETAG_REMOTE_TAG}"
-        target_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:${DEPLOY_RETAG_TARGET_TAG}"
-
-        echo
-        echo DEPLOY_RETAG_AND_PUSH: ${DEPLOY_RETAG_AND_PUSH}
-        echo remote_tag: ${remote_tag}
-        echo target_tag: ${target_tag}
-        echo
-
-        ecr_pull_image \
-            $remote_tag
-
-        ecr_tag_image \
-            $remote_tag \
-            $target_tag
-
-        ecr_push_image \
-            $target_tag
-
-        DEPLOY_IMAGE="${target_tag}"
-
-    else
-
-        target_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:$(_get_target_image_tag)"
-
-        echo
-        echo Pushing primary tag
-        echo target_tag: ${target_tag}
-        echo
-
-        ecr_tag_image \
-            $DEPLOY_DOCKER_LOCAL_TAG \
-            $target_tag
-
-        ecr_push_image \
-            $target_tag
-
-        if [[ ! -z "$DEPLOY_PUSH_SECONDARY_TAG" ]] ; then
-
-            secondary_tag="${DEPLOY_ECR_HOST}/${ecr_repo_name}:${DEPLOY_PUSH_SECONDARY_TAG}"
-
-            echo
-            echo Pushing secondary tag
-            echo secondary_tag: ${secondary_tag}
-            echo
-
-            ecr_tag_image \
-                $target_tag \
-                $secondary_tag
-
-            ecr_push_image \
-                $secondary_tag
-        fi
-
-        DEPLOY_IMAGE="${target_tag}"
-
-    fi
-
-    if [[ -z "${DEPLOY_IMAGE}" ]] ; then
-        echo "Error: deploy image is undefined, DEPLOY_IMAGE=${DEPLOY_IMAGE}"
-        exit 1
-    fi
-
-}
-
-function _ecs_update_service() {
+function _ecs_register_updated_task () {
 
     DEPLOY_IMAGE_TAG="${DEPLOY_IMAGE_TAG:-$(_get_target_image_tag)}"
 
-    #
-    # deploy task defs
-    #
+    local ecr_repo_name="${DEPLOY_ECR_REPO:-$DEPLOY_APP_NAME}"
+    local image="${DEPLOY_ECR_HOST}/${ecr_repo_name}:${DEPLOY_IMAGE_TAG}"
 
-    # deploy all the tasks first...
-    if [[ -z "$DEPLOY_ECS_FAMILIES" ]] ; then
+    previous_task=$( \
+        aws ecs describe-task-definition \
+            --profile ${DEPLOY_AWS_PROFILE} \
+            --task-definition ${DEPLOY_APP_NAME}
+    )
 
-        ecs_deploy_task $DEPLOY_IMAGE_TAG
-        ecs_verify_deploy
+    # create new task def json from previous task
+    task_def=$( \
+        echo ${previous_task} \
+          | $JQ --arg IMAGE "${image}" '.taskDefinition.containerDefinitions[0].image = $IMAGE' \
+          | $JQ '.taskDefinition' \
+          | $JQ 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredBy, .registeredAt)'
+    )
 
-    else
+    echo ${task_def} > temp_fulltask_${DEPLOY_APP_NAME}.json
 
-        for family in $DEPLOY_ECS_FAMILIES
-        do
-            ecs_deploy_task $DEPLOY_IMAGE_TAG $family
-        done
+    register_task=$( \
+        aws ecs register-task-definition \
+            --profile ${DEPLOY_AWS_PROFILE} \
+            --cli-input-json file://temp_fulltask_${DEPLOY_APP_NAME}.json
+    )
 
-        for family in $DEPLOY_ECS_FAMILIES
-        do
-            ecs_verify_deploy $family
-        done
+    task_arn=$( \
+        echo ${register_task} | $JQ '.taskDefinition.taskDefinitionArn'
+    )
 
-    fi
-
+    ECS_UPDATED_TASK_ARNS[ ${DEPLOY_APP_NAME} ] = $task_arn
 }
+
+function _ecs_update_service_task_image () {
+
+    local task_arn=${ECS_UPDATED_TASK_ARNS[${DEPLOY_APP_NAME}]}
+
+    revision_actual=$( \
+          aws ecs update-service \
+            --profile ${DEPLOY_AWS_PROFILE} \
+            --cluster ${DEPLOY_ECS_CLUSTER_NAME} \
+            --service ${DEPLOY_APP_NAME} \
+            --task-definition $task_arn \
+          | $JQ '.service.taskDefinition' \
+      )
+
+    if [ "$task_arn" != "$revision_actual" ] ; then
+        echo "Error updating service. Target does not match actual: $task_arn != ${revision_actual} "
+        exit 1
+    fi
+}
+
 
 
 ##
@@ -645,12 +737,12 @@ function _lambda_wait_for_function_updated () {
     aws lambda wait function-updated \
         --profile       "${DEPLOY_AWS_PROFILE}" \
         --function-name "${DEPLOY_LAMBDA_FUNCTION_NAME}"
-  
-    if [[ $? != 0 ]] ; then  
+
+    if [[ $? != 0 ]] ; then
         echo "Error waiting for lambda function to update, DEPLOY_LAMBDA_FUNCTION_NAME=${DEPLOY_LAMBDA_FUNCTION_NAME}"
         exit 1
     fi
-    
+
 }
 
 
@@ -913,7 +1005,7 @@ function lambda_deploy () {
         echo "Info: Attemping to update existing lambda function"
 
         _lambda_wait_for_function_updated
-    
+
         lambda_function_arn=$( \
             aws lambda update-function-configuration \
                 --profile "${DEPLOY_AWS_PROFILE}" \
