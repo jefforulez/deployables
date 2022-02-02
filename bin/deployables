@@ -398,7 +398,7 @@ function _get_target_image_tag() {
   local local_target_tag="${DEPLOY_CURRENT_TIME}-${DEPLOY_SHA1}"
 
   if [ ! -z "$DEPLOY_ADD_ENV_TO_TAG" ]; then
-    local_target_tag="${local_target_tag}-${DEPLOY_ADD_ENV_TO_TAG:-$FLM_ENV}"
+    local_target_tag="${local_target_tag}-${DEPLOY_ADD_ENV_TO_TAG}"
   fi
 
   echo $local_target_tag
