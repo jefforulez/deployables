@@ -397,6 +397,8 @@ function _get_target_image_tag() {
 
   local local_target_tag="${DEPLOY_CURRENT_TIME}-${DEPLOY_SHA1}"
 
+  # this is used if the docker image has build-time environmental configs;
+  # e.g. webpack generates different static files based on the build-time $NODE_ENV
   if [ ! -z "$DEPLOY_ADD_ENV_TO_TAG" ]; then
     local_target_tag="${local_target_tag}-${DEPLOY_ADD_ENV_TO_TAG}"
   fi
