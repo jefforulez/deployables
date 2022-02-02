@@ -190,7 +190,8 @@ function docker_build {
 
     docker build \
         --rm=false \
-        ${NPM_TOKEN:+ --build-arg NPM_TOKEN=$NPM_TOKEN}\
+        ${NODE_ENV:+ --build-arg NODE_ENV=$NODE_ENV} \
+        ${NPM_TOKEN:+ --build-arg NPM_TOKEN=$NPM_TOKEN} \
         ${keyfile:+ --build-arg GITHUB_MACHINE_USER_KEY="$(< ${keyfile} )"} \
         -t ${DEPLOY_DOCKER_LOCAL_TAG} \
         -f ${DEPLOY_DOCKERFILE} \
