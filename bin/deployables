@@ -890,6 +890,8 @@ function lambda_update_from_s3 () {
         exit 1
     fi
 
+    _lambda_wait_for_function_updated
+
     if [[ ! -z "${DEPLOY_LAMBDA_ZIP_VERSION}" ]] ; then
 
         lambda_function_version=$( \
@@ -905,6 +907,8 @@ function lambda_update_from_s3 () {
         echo "Error: Failed to publish lambda version"
             exit 1
         fi
+
+        _lambda_wait_for_function_updated
 
     fi
 
