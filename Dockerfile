@@ -1,5 +1,5 @@
 
-FROM cimg/base:2021.10
+FROM cimg/base:2022.02
 
 RUN sudo apt-get update \
   && sudo apt-get install -y \
